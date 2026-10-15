@@ -72,8 +72,12 @@ jobs:
     timeout-minutes: 90 # a cold React Native/Expo build on the free runner takes 30-60 minutes
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository with Git LFS
         uses: actions/checkout@v7
+        with:
+          lfs: true
+          fetch-depth: 0
+
 
       # The dispatch always runs the workflow from the default branch, so the
       # sources come from a snapshot ref pushed by the CLI instead.
@@ -86,6 +90,31 @@ jobs:
           git fetch --depth=1 origin "+$SNAPSHOT_REF:refs/heads/snapshot"
           git checkout --force snapshot
           echo "Building $(git rev-parse --short HEAD)"
+      
+      
+
+      - name: Download Git LFS files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git lfs install
+          git lfs pull
+          git lfs checkout
+
+          echo "Checking downloaded Git LFS files..."
+
+          while IFS= read -r file; do
+            [ -f "$file" ] || continue
+
+            if head -n 1 "$file" | grep -q '^version https://git-lfs.github.com/spec/v1$'; then
+              echo "::error::Git LFS pointer remains in working tree: $file"
+              exit 1
+            fi
+          done < <(git lfs ls-files -n)
+
+          echo "Git LFS working-tree check passed."
+
 
       # Dispatch inputs arrive with their declared defaults; a tag push has none,
       # so the values come from builder.json in the tagged commit (defaultProfile
